@@ -1,2 +1,2 @@
 # ignore dir __pycache__ in this project
-global-exclude __pycache__
+__pycache__/
