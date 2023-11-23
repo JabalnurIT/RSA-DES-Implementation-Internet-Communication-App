@@ -1,7 +1,105 @@
 import socketio
 import time
 
+
+from des import DES
+from utils import Utils
+
+
+des = DES()
+utils = Utils()
+
 sio = socketio.Client()
+
+
+def generateKey(key):
+    key = key.upper()
+
+    key = utils.hex2bin(key)
+
+    keyp = [57, 49, 41, 33, 25, 17, 9,
+            1, 58, 50, 42, 34, 26, 18,
+            10, 2, 59, 51, 43, 35, 27,
+            19, 11, 3, 60, 52, 44, 36,
+            63, 55, 47, 39, 31, 23, 15,
+            7, 62, 54, 46, 38, 30, 22,
+            14, 6, 61, 53, 45, 37, 29,
+            21, 13, 5, 28, 20, 12, 4]
+
+    key = des.permute(key, keyp, 56)
+
+    shift_table = [1, 1, 2, 2,
+                2, 2, 2, 2,
+                1, 2, 2, 2,
+                2, 2, 2, 1]
+
+    key_comp = [14, 17, 11, 24, 1, 5,
+                3, 28, 15, 6, 21, 10,
+                23, 19, 12, 4, 26, 8,
+                16, 7, 27, 20, 13, 2,
+                41, 52, 31, 37, 47, 55,
+                30, 40, 51, 45, 33, 48,
+                44, 49, 39, 56, 34, 53,
+                46, 42, 50, 36, 29, 32]
+
+    left = key[0:28]  # rkb for RoundKeys in binary
+    right = key[28:56]  # rk for RoundKeys in hexadecimal
+
+    rkb = []
+    rk = []
+    for i in range(0, 16):
+        left = des.shift_left(left, shift_table[i])
+        right = des.shift_left(right, shift_table[i])
+
+        combine_str = left + right
+
+        round_key = des.permute(combine_str, key_comp, 48)
+
+        rkb.append(round_key)
+        rk.append(utils.bin2hex(round_key))
+
+    return rk, rkb
+
+def encrypt(text, key):
+    rk, rkb = generateKey(key)
+
+    pt_all = utils.string_to_hexadecimal(text).upper()
+    pt_chunks = [pt_all[i:i + 16] for i in range(0, len(pt_all), 16)]
+    if len(pt_chunks[-1]) % 16 != 0:
+        while len(pt_chunks[-1]) % 16 != 0:
+            pt_chunks[-1] += "20"
+
+    cipher_text_all = ""
+
+    for i,pt in enumerate(pt_chunks):
+        cipher_text_hexa = utils.bin2hex(des.encrypt(pt, rkb, rk))
+        cipher_text = utils.hexadecimal_to_string(cipher_text_hexa)
+        cipher_text_all += cipher_text
+
+    return cipher_text_all
+
+def decrypt(text, key):
+    rk, rkb = generateKey(key)
+    
+    cipher_text_hexa_all = utils.string_to_hexadecimal(text).upper()
+    cipher_text_hexa_all_chunks = [cipher_text_hexa_all[i:i + 16] for i in range(0, len(cipher_text_hexa_all), 16)]
+
+    text_all = ""
+    text_hexa_all = ""
+
+    for i,cipher_text_hexa in enumerate(cipher_text_hexa_all_chunks):
+        rkb_rev = rkb[::-1]
+        rk_rev = rk[::-1]
+        text_hexa = utils.bin2hex(des.encrypt(cipher_text_hexa, rkb_rev, rk_rev))
+        text_hexa_all += text_hexa
+        text = utils.hexadecimal_to_string(text_hexa)
+        text_all += text
+
+    text_hexa_all_chunks = [text_hexa_all[i:i + 16] for i in range(0, len(text_hexa_all), 16)]
+    text_all = text_all.rstrip()
+
+    return text_all
+
 
 username = input("Enter your username: ")
 encryption_key = input("Enter the key to encrypt the message: ")
@@ -61,13 +159,16 @@ if __name__ == '__main__':
                     choice = int(input("Enter the number of the user: "))
                     recipient_sid = connected_users[choice - 1]['sid']
                     print("Recepient Username: ", connected_users[choice - 1]['username'])
+                    print("Recepient SID: ", recipient_sid)
                 except (ValueError, IndexError):
                     print("Invalid choice. Please enter a valid number.")
                     continue
 
                 text_to_send = input("Enter message to send: ")
+    
+                encrypted_text = encrypt(text_to_send, encryption_key)
                 
-                sio.emit('send_message', {'text': text_to_send, 'key': encryption_key, 'recipient_sid': recipient_sid})
+                sio.emit('send_message', {'text': encrypted_text, 'recipient_sid': recipient_sid})
                 
                 print("Send Again? (y/n)")
                 exit_choice = input()
@@ -94,10 +195,12 @@ if __name__ == '__main__':
                 
                 if len(received_messages) != 0:
                     decryption_key = input("Enter the key to decrypt the message: ")
+
                     print(f"Messages from {sender_user['username']}:")
                     for message in received_messages:
                         if message['sender_sid'] == sender_user['sid']:
-                            sio.emit('get_message', {'text': message['text'], 'key': decryption_key, 'sender_username': sender_user['username']})
+                            decrypted_text = decrypt(message['text'], decryption_key)       
+                            print(f"Received Message from {sender_user['username']}: {decrypted_text}")
                 
                 time.sleep(1)
                 print("Open Again? (y/n)")
