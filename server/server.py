@@ -22,22 +22,24 @@ def send_message(sid, data):
     sender_sid = sid
     encrypted_text = data['text']
     recipient_sid = data['recipient_sid']
+    encrypted_encryption_key = data['encrypted_encryption_key']
     
     for client_sid, client_info in clients.items():
         if client_sid == recipient_sid:
-            sio.emit('receive_message', {'sender_sid': sender_sid, 'encrypted_text': encrypted_text}, room=client_sid)
+            sio.emit('receive_message', {'sender_sid': sender_sid, 'encrypted_text': encrypted_text, 'encrypted_encryption_key':encrypted_encryption_key}, room=client_sid)
             break
 
 @sio.event
 def set_username(sid, data):
     username = data.get('username')
+    public_key = data.get('public_key')
     if username:
-        clients[sid] = {'sid': sid, 'username': username}
-        print(f"Client {sid} set username to {username}")
+        clients[sid] = {'sid': sid, 'username': username, 'public_key': public_key}
+        print(f"Client {sid} set username to {username}, public key to {public_key}")
 
 @sio.event
 def get_user_list(sid):
-    user_list = [{'username': client_info['username'], 'sid': client_info['sid']} for client_sid, client_info in clients.items()]
+    user_list = [{'username': client_info['username'], 'sid': client_info['sid'], 'public_key': client_info['public_key']} for client_sid, client_info in clients.items()]
     user_send = []
     for user in user_list:
         if user['sid'] != sid:

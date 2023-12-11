@@ -1,13 +1,18 @@
 import socketio
 import time
+import random
+import math
 
 
 from des import DES
 from utils import Utils
+from rsa import RSA
 
 
 des = DES()
+rsa = RSA()
 utils = Utils()
+
 
 sio = socketio.Client()
 
@@ -60,7 +65,7 @@ def generateKey(key):
 
     return rk, rkb
 
-def encrypt(text, key):
+def encrypt_des(text, key):
     rk, rkb = generateKey(key)
 
     pt_all = utils.string_to_hexadecimal(text).upper()
@@ -78,7 +83,7 @@ def encrypt(text, key):
 
     return cipher_text_all
 
-def decrypt(text, key):
+def decrypt_des(text, key):
     rk, rkb = generateKey(key)
     
     cipher_text_hexa_all = utils.string_to_hexadecimal(text).upper()
@@ -100,6 +105,93 @@ def decrypt(text, key):
 
     return text_all
 
+# A set will be the collection of prime numbers,
+# where we can select random primes p and q
+prime = set()
+
+my_public_key = None
+my_private_key = None
+n = None
+
+# We will run the function only once to fill the set of
+# prime numbers
+def primefiller():
+    # Method used to fill the primes set is Sieve of
+    # Eratosthenes (a method to collect prime numbers)
+    seive = [True] * 250
+    seive[0] = False
+    seive[1] = False
+    for i in range(2, 250):
+        for j in range(i * 2, 250, i):
+            seive[j] = False
+
+    # Filling the prime numbers
+    for i in range(len(seive)):
+        if seive[i]:
+            prime.add(i)
+
+
+# Picking a random prime number and erasing that prime
+# number from list because p!=q
+def pickrandomprime():
+    global prime
+    k = random.randint(0, len(prime) - 1)
+    it = iter(prime)
+    for _ in range(k):
+        next(it)
+
+    ret = next(it)
+    prime.remove(ret)
+    return ret
+
+
+def setkeys():
+    global my_public_key, my_private_key, n
+    prime1 = pickrandomprime() # First prime number
+    prime2 = pickrandomprime() # Second prime number
+
+    n = prime1 * prime2
+    fi = (prime1 - 1) * (prime2 - 1)
+
+    e = 2
+    while True:
+        if math.gcd(e, fi) == 1:
+            break
+        e += 1
+
+    # d = (k*Φ(n) + 1) / e for some integer k
+    my_public_key = f"{n}:{e}"
+
+    d = 2
+    while True:
+        if (d * e) % fi == 1:
+            break
+        d += 1
+
+    my_private_key = d
+
+
+# First converting each character to its ASCII value and
+# then encoding it then decoding the number to get the
+# ASCII and converting it to character
+def encrypt_rsa(message, public_key):
+    n = int(public_key.split(':')[0])
+    e = int(public_key.split(':')[1])
+    encoded = []
+    # Calling the encrypting function in encoding function
+    for letter in message:
+        encoded.append(rsa.encrypt(ord(letter.upper()), e, n))
+    return encoded
+
+
+def decrypt_rsa(encoded):
+    global my_private_key, n
+    s = ''
+    # Calling the decrypting function decoding function
+    for num in encoded:
+        s += chr(rsa.decrypt(num, my_private_key, n))
+    return s
+
 
 username = input("Enter your username: ")
 encryption_key = input("Enter the key to encrypt the message: ")
@@ -111,7 +203,7 @@ received_messages = []
 def connect():
     global connected_users
     print("Connected to server")
-    sio.emit('set_username', {'username': username})
+    sio.emit('set_username', {'username': username, 'public_key': my_public_key})
 
 @sio.event
 def disconnect():
@@ -121,8 +213,9 @@ def disconnect():
 def receive_message(data):
     sender_sid = data['sender_sid']
     encrypted_text = data['encrypted_text']
+    encrypted_encryption_key = data['encrypted_encryption_key']
     global received_messages
-    received_messages.append({'sender_sid': sender_sid, 'text': encrypted_text})
+    received_messages.append({'sender_sid': sender_sid, 'text': encrypted_text, 'encrypted_encryption_key': encrypted_encryption_key})
 
 @sio.event
 def open_message(data):
@@ -136,6 +229,8 @@ def user_list(data):
             connected_users.append(user)
 
 if __name__ == '__main__':
+    primefiller()
+    setkeys()
     server_url = 'http://localhost:8888'
     sio.connect(server_url)
     sio.emit('get_user_list')
@@ -159,16 +254,18 @@ if __name__ == '__main__':
                     choice = int(input("Enter the number of the user: "))
                     recipient_sid = connected_users[choice - 1]['sid']
                     print("Recepient Username: ", connected_users[choice - 1]['username'])
-                    print("Recepient SID: ", recipient_sid)
                 except (ValueError, IndexError):
                     print("Invalid choice. Please enter a valid number.")
                     continue
 
                 text_to_send = input("Enter message to send: ")
     
-                encrypted_text = encrypt(text_to_send, encryption_key)
+                encrypted_text = encrypt_des(text_to_send, encryption_key)
+
+                # encrypt encryption_key with public key rsa from selected user
+                encrypted_encryption_key = encrypt_rsa(encryption_key, connected_users[choice - 1]['public_key']) 
                 
-                sio.emit('send_message', {'text': encrypted_text, 'recipient_sid': recipient_sid})
+                sio.emit('send_message', {'text': encrypted_text, 'recipient_sid': recipient_sid, 'encrypted_encryption_key': encrypted_encryption_key})
                 
                 print("Send Again? (y/n)")
                 exit_choice = input()
@@ -194,12 +291,13 @@ if __name__ == '__main__':
                 print(f"Total Messages Received: {len(received_messages)}")
                 
                 if len(received_messages) != 0:
-                    decryption_key = input("Enter the key to decrypt the message: ")
 
                     print(f"Messages from {sender_user['username']}:")
                     for message in received_messages:
                         if message['sender_sid'] == sender_user['sid']:
-                            decrypted_text = decrypt(message['text'], decryption_key)       
+                            encrypted_decryption_key = message['encrypted_encryption_key']
+                            decryption_key = decrypt_rsa(encrypted_decryption_key)
+                            decrypted_text = decrypt_des(message['text'], decryption_key)       
                             print(f"Received Message from {sender_user['username']}: {decrypted_text}")
                 
                 time.sleep(1)
