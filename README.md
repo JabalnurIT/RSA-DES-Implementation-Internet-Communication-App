@@ -1,6 +1,6 @@
-# Socket.IO Chat Application with DES Encryption
+# Socket.IO Chat Application with RSA-DES Encryption
 
-This Python-based chat application leverages Socket.IO for real-time communication and employs the Data Encryption Standard (DES) algorithm to ensure secure messaging between users.
+This Python-based chat application leverages Socket.IO for real-time communication and employs the Data Encryption Standard (DES) algorithm to ensure secure messaging between users and use Rivest–Shamir–Adleman (RSA) to ensure DES key between users.
 
 ## Features
 
@@ -12,6 +12,10 @@ This Python-based chat application leverages Socket.IO for real-time communicati
   - Implements the Data Encryption Standard (DES) algorithm for message encryption.
   - Provides a secure communication channel for users.
 
+- **Secure Key Exchange with RSA:**
+  - Implements the Rivest–Shamir–Adleman (RSA) algorithm for key exchange.
+  - Provides a secure communication channel for users.
+
 - **User Management:**
   - Users can set and display their usernames.
   - Maintains a list of connected users.
@@ -21,7 +25,7 @@ This Python-based chat application leverages Socket.IO for real-time communicati
 ### Prerequisites
 
 - Python 3.x
-- Required Python packages: `socketio`, `eventlet`
+- Required Python packages: `socketio`, `eventlet`, `math`, `random`
 
 ### Installation
 
@@ -29,7 +33,7 @@ This Python-based chat application leverages Socket.IO for real-time communicati
 
     ```bash
     git clone <repository_url>
-    cd DES-Implementation-Internet-Communication-App
+    cd RSA-DES-Implementation-Internet-Communication-App
     ```
 
 2. Install the required Python packages:
@@ -59,7 +63,10 @@ This Python-based chat application leverages Socket.IO for real-time communicati
 ## Customization
 
 - **DES Encryption Settings:**
-  - The DES encryption settings, including key generation and message encryption/decryption, are configured in the `server/des.py` and `server/server.py` files.
+  - The DES encryption settings, including key generation and message encryption/decryption, are configured in the `client/des.py` and `client/client.py` files.
+
+- **RSA Encryption Settings:**
+  - The RSA encryption settings, including key generation and message encryption/decryption, are configured in the `client/rsa.py` and `client/client.py` files.
 
 - **Socket.IO Event Handling:**
   - Customize Socket.IO event handlers in the `server/server.py` and `client/client.py` files based on your application's requirements.
